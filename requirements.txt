@@ -1,0 +1,3 @@
+# Core tool (find_dependents.py) needs nothing but the standard library.
+# The MCP server (server.py) needs the MCP SDK:
+mcp>=1.0

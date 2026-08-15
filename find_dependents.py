@@ -10,17 +10,16 @@ partners.
 
 Something a generic "fetch one company's filing" EDGAR tool can't do.
 
-Usage:
-    export SEC_UA="Your Name your-email@example.com"     # SEC requires a real UA
-    python find_dependents.py "AeroVironment"
-    python find_dependents.py "AeroVironment" --forms 10-K --limit 2000
-    python find_dependents.py "Lockheed Martin" --forms 10-K,10-Q
+Use it three ways:
+  * CLI:      python find_dependents.py "AeroVironment" --forms 10-K
+  * Library:  from find_dependents import find_dependents; find_dependents("...")
+  * MCP:      python server.py   (exposes find_dependents as a tool an AI can call)
 
 Notes:
   * SEC full-text search covers filings from 2001 to present.
   * Searching a bare company name returns that company's OWN filings first, so
     you must scan the FULL result set to reach the dependents ranked below them
-    — hence a high default --limit. The prime is then excluded by name.
+    — hence a high default limit. The prime is then excluded by name.
   * SEC fair-access: descriptive User-Agent required, <=10 req/sec. Self-throttled.
   * Industry (SIC) comes back inline in the search response — no extra calls.
 """
@@ -152,20 +151,20 @@ def fetch_filers(query, forms, max_scan, ua, limiter):
             break
 
 
-def main():
-    ap = argparse.ArgumentParser(description="EDGAR inversion — find the companies that name a given company as a dependency.")
-    ap.add_argument("prime", help='Company name to invert on, e.g. "AeroVironment"')
-    ap.add_argument("--forms", default="10-K", help='Form filter (comma-sep), default 10-K. Use "" for all forms.')
-    ap.add_argument("--limit", type=int, default=2000, help="Max filings to scan (default 2000; raise for very common names).")
-    ap.add_argument("--out", default="dependents", help="Output basename for .csv/.json (default: dependents).")
-    args = ap.parse_args()
+def find_dependents(prime, forms="10-K", limit=2000, ua=None):
+    """Return the companies whose own filings name `prime` (prime itself removed),
+    ranked by how often each names it.
 
-    ua = get_ua()
+    Each row: {cik, name, ticker, sic, industry, filings, forms, latest, latest_url}.
+    This is the importable core — the CLI and the MCP server both call it.
+    """
+    if ua is None:
+        ua = get_ua()
     limiter = RateLimiter()
-    prime_norm = re.sub(r"[^a-z0-9]", "", args.prime.lower())
+    prime_norm = re.sub(r"[^a-z0-9]", "", prime.lower())
 
     agg = {}
-    for f in fetch_filers(args.prime, args.forms, args.limit, ua, limiter):
+    for f in fetch_filers(prime, forms, limit, ua, limiter):
         cik = f["cik"]
         if not cik:
             continue
@@ -185,6 +184,20 @@ def main():
             rec["latest_url"] = filing_url(cik, f["id"])
 
     rows = sorted(agg.values(), key=lambda r: (r["filings"], r["latest"]), reverse=True)
+    for r in rows:  # sets aren't JSON-serialisable — flatten to a string
+        r["forms"] = ",".join(sorted(r["forms"])) if isinstance(r["forms"], set) else r["forms"]
+    return rows
+
+
+def main():
+    ap = argparse.ArgumentParser(description="EDGAR inversion — find the companies that name a given company as a dependency.")
+    ap.add_argument("prime", help='Company name to invert on, e.g. "AeroVironment"')
+    ap.add_argument("--forms", default="10-K", help='Form filter (comma-sep), default 10-K. Use "" for all forms.')
+    ap.add_argument("--limit", type=int, default=2000, help="Max filings to scan (default 2000; raise for very common names).")
+    ap.add_argument("--out", default="dependents", help="Output basename for .csv/.json (default: dependents).")
+    args = ap.parse_args()
+
+    rows = find_dependents(args.prime, args.forms, args.limit)
 
     if not rows:
         print('\nNo dependents found. Try --forms "" (all forms), raise --limit, or check the exact name.')
@@ -197,8 +210,6 @@ def main():
         print(f"{i:>3}  {r['name'][:40]:40}  {r['ticker'][:6]:6}  {r['cik']:10}  "
               f"{r['filings']:>3}  {r['latest']:10}  {r['industry'][:30]}")
 
-    for r in rows:
-        r["forms"] = ",".join(sorted(r["forms"]))
     with open(args.out + ".json", "w") as fh:
         json.dump(rows, fh, indent=2)
     with open(args.out + ".csv", "w", newline="") as fh:

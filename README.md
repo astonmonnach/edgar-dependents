@@ -46,6 +46,41 @@ aerostructures, electronics — around the named company.
 
 Respects SEC fair-access: descriptive UA, under 10 req/sec, self-throttled.
 
+## Use it as an MCP (drive it with an AI)
+
+The same inversion is exposed as an [MCP](https://modelcontextprotocol.io) tool,
+so an AI (e.g. Claude) can call it mid-conversation — "who depends on Lockheed
+Martin?" — and get the ranked list back to reason over.
+
+```
+pip install mcp
+export SEC_UA="Your Name you@email.com"
+python server.py
+```
+
+Add it to Claude Desktop's `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "edgar-dependents": {
+      "command": "python",
+      "args": ["/full/path/to/server.py"],
+      "env": { "SEC_UA": "Your Name you@email.com" }
+    }
+  }
+}
+```
+
+It exposes one tool, `find_dependents(company, forms="10-K", limit=2000)`,
+returning the ranked dependents as structured data. The cleaning logic lives in
+`find_dependents.py` and is importable as a library too:
+
+```python
+from find_dependents import find_dependents
+rows = find_dependents("Lockheed Martin", forms="10-K,10-Q")
+```
+
 ## Notes
 
 - SEC full-text search covers filings from 2001 to present.
