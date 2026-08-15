@@ -94,6 +94,6 @@ Built by **Aston Monnach** — I build MCP servers and data pipelines that wire
 messy real-world data into AI.
 Maker of **[NoxarQuant](https://noxarquant.com)** — quant-grade trade intelligence.
 
-**Build & contract enquiries:** astonmonnach@noxarquant.com
+**Build & contract enquiries:** founder@noxarquant.com
 
 *MIT licensed — use it freely.*
